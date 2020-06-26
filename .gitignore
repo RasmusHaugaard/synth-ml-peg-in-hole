@@ -1,5 +1,5 @@
 synth_ml_data*
-models
+/models
 **/__pycache__
 .idea
 .ipynb_checkpoints
