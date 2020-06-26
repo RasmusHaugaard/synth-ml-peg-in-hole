@@ -1,0 +1,95 @@
+from typing import Union
+
+import numpy as np
+from scipy.spatial.transform import Rotation
+
+L = Union[list, tuple, np.ndarray]
+
+
+class Transform:
+    def __init__(self, r: Rotation = None, t: L = None, matrix: L = None, euler: L = None,
+                 rpy: L = None, rotvec: L = None, quat: L = None, rotmat: L = None):
+        for name, reprs in [
+            ('rotation', (r, matrix, euler, rpy, rotvec, quat, rotmat)),
+            ('translation', (t, matrix)),
+        ]:
+            assert sum([v is not None for v in reprs]) <= 1, 'only one {} should be provided once'.format(name)
+        if matrix is not None:
+            matrix = matrix / matrix[-1, -1]
+            r = Rotation.from_matrix(matrix[:3, :3])
+            t = matrix[:3, 3]
+        elif euler is not None:
+            r = Rotation.from_euler(euler[0], euler[1])
+        elif rpy is not None:
+            r = Rotation.from_euler('xyz', rpy)
+        elif rotvec is not None:
+            r = Rotation.from_rotvec(rotvec)
+        elif quat is not None:
+            r = Rotation.from_quat(quat)
+        self.r = Rotation.identity() if r is None else r
+        self.t = np.zeros(3) if t is None else np.asarray(t)
+
+    def inv(self):
+        r = self.r.inv()
+        t = -self.t @ r.as_matrix().T
+        return Transform(r, t)
+
+    def as_matrix(self):
+        m = np.eye(4)
+        m[:3, :3] = self.r.as_matrix()
+        m[:3, 3] = self.t
+        return m
+
+    def matmul(self, other):
+        if isinstance(other, Transform):
+            return Transform(matrix=self.as_matrix() @ other.as_matrix())
+        elif isinstance(other, (np.ndarray, list, tuple)):
+            other = np.asarray(other)
+            shape = other.shape
+            if len(shape) == 1:
+                other = other.reshape(3, 1)
+            assert shape[0] == 3
+            result = self.r.as_matrix() @ other + self.t.reshape(3, 1)
+            return result.reshape(shape)
+        else:
+            raise NotImplementedError()
+
+    def rotate_vector(self, other):
+        if isinstance(other, (np.ndarray, list, tuple)):
+            other = np.asarray(other)
+            shape = other.shape
+            if len(shape) == 1:
+                other = other.reshape(3, 1)
+            assert shape[0] == 3
+            result = self.r.as_matrix() @ other
+            return result.reshape(shape)
+        else:
+            raise NotImplementedError()
+
+    def __matmul__(self, other):
+        return self.matmul(other)
+
+    def __str__(self):
+        str_numbers = ['{:.3g}'.format(v) for v in (*self.t, *self.r.as_euler('xyz'))]
+        return 'xyz: ({}, {}, {}), rpy: ({}, {}, {})'.format(*str_numbers)
+
+
+def tests(atol=1e-13, n=100):
+    for _ in range(n):
+        t = np.random.randn(3)
+        rpy = np.random.randn(3)
+        f = Transform(t=t, rpy=rpy)
+
+        # matmul
+        f_ = Transform(t=t) @ Transform(rpy=rpy)
+        assert np.abs(f.as_matrix() - f_.as_matrix()).max() < atol
+
+        # inverse
+        assert np.abs((f.inv() @ f).as_matrix() - np.eye(4)).max() < atol
+        assert np.abs(np.linalg.inv(f.as_matrix()) - f.inv().as_matrix()).max() < atol
+
+    print(Transform(t=(.1, 0, .2), rotvec=(.1, .1, .1)))
+
+
+if __name__ == '__main__':
+    tests()
