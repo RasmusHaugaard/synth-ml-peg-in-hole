@@ -15,8 +15,7 @@ from rospy_tutorials.msg import Floats
 from sensor_msgs.msg import Image as ImageMsg
 from ros_numpy.image import numpy_to_image, image_to_numpy
 
-from vec_img_math import norm_grad_from_vec_img, points_from_grad_img, draw_points, \
-    edges_from_grad_img, hough_lines, draw_lines_from_point_pairs, points_to_line
+from vec_img_math import draw_points
 from ml.models.unet import ResNetUNet
 
 parser = argparse.ArgumentParser()
@@ -66,7 +65,7 @@ def main():
         for inq, annotation_pub, annotated_img_pub, in zip(in_qs, annotation_pubs, annotated_img_pubs):
             # sequential inference in the main thread, interlaced between image sources
             try:
-                img = image_to_numpy(inq.get_nowait())
+                img = image_to_numpy(inq.get(timeout=1.))
             except queue.Empty:
                 continue
             hms = infer(model, Image.fromarray(img))
